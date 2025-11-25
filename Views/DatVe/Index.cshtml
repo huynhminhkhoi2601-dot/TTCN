@@ -1,0 +1,640 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đặt Vé</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome (cho icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Google Font (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="~/css/site3.css" rel="stylesheet" />
+</head>
+<body>
+
+    <!-- Header thông tin phim -->
+    <header class="movie-header">
+        <div class="container">
+            @foreach (var item in ViewBag.dlPhimDaChon)
+            {
+                <h1>@item.TenPhim</h1>
+                <span>@item.ThoiLuong</span>
+                <span> phút</span>
+                <span>|@string.Join(", ", item.TenTheLoai)</span>    
+            }
+        </div>
+    </header>
+
+    <div class="container-fluid my-4">
+        <div class="row">
+
+            <!-- CỘT BÊN TRÁI: CHỌN SUẤT & CHỌN GHẾ -->
+            <div class="col-lg-8">
+                @{
+                    // 1. Ép kiểu ViewBag về Model Phim để code hiểu
+                    var phim = ViewBag.dlSuatChieu as TTCN.Models.Phim;
+
+                    // 2. Gom nhóm các suất chiếu theo Cụm Rạp
+                    // Logic: Lấy danh sách suất chiếu -> Nhảy sang Phòng -> Nhảy sang Rạp -> Lấy Tên Rạp -> Gom lại
+                    var danhSachRap = phim.SuatChieus
+                    .GroupBy(sc => sc.MaPhongNavigation.MaCumRapNavigation) // Group theo object CumRap
+                    .Select(g => g.Key) // Lấy ra cái Key (chính là CumRap)
+                    .ToList();
+                }
+                <div class="showtime-selector">
+                    <div class="filter-header mb-4">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="filter-label">Khu vực</label>
+                                <div class="select-wrapper">
+                                    <select class="form-select custom-select">
+                                        @foreach (var rap in danhSachRap.Select(r => r.ThanhPho).Distinct())
+                                        {
+                                            <option>@rap</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="filter-label">Cụm rạp</label>
+                                <div class="select-wrapper">
+                                    <select class="form-select custom-select" id="cinema-select" onchange="updateCinemaInfo()">
+                                        @foreach (var rap in danhSachRap)
+                                        {
+                                            <option value="@rap.TenCumRap" data-id="@rap.MaCumRap">@rap.TenCumRap</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="border-secondary mb-4">
+                    <h6>Chọn Ngày</h6>
+                    <ul class="nav nav-pills mb-3" id="pills-tab-date" role="tablist">
+                        @{
+                            int active = 0;
+                        }
+                        <ul class="nav nav-pills mb-3" id="pills-tab-date" role="tablist">
+                            @foreach (var item in ViewBag.dlPhimDaChon)
+                            {
+                                @foreach (var ngay in @item.CacNgayChieu)
+                                {
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link date-btn @(active == 0 ? "active" : "")"
+                                                type="button" onclick="filterShowtimeByDate(this, '@ngay.ToString("yyyy-MM-dd")')">
+                                            <span class="day-num">@ngay.ToString("dd")</span>
+                                            <span class="day-month">/@ngay.ToString("MM")</span>
+                                        </button>
+                                    </li>
+                                    { active++; }
+                                }
+                            }
+                        </ul>
+                    </ul>
+                    <div class="showtime-list-container">
+                        @{
+                            var nhomTheoRap = phim.SuatChieus.GroupBy(s => s.MaPhongNavigation.MaCumRapNavigation);
+                        }
+                            @foreach (var rapGroup in nhomTheoRap)
+                            {
+                                <div class="cinema-block" data-cinema-id="@rapGroup.Key.MaCumRap">
+                                    <div class="cinema-title-row">
+                                        <div class="cinema-icon"><i class="fas fa-map-marker-alt"></i></div>
+                                        <h5 class="cinema-name">@rapGroup.Key.TenCumRap</h5>
+                                    </div>
+                                    <div class="rooms-container">
+                                        @{
+                                            var nhomTheoPhong = rapGroup.GroupBy(s => s.MaPhongNavigation);
+                                        }
+
+                                        @foreach (var phongGroup in nhomTheoPhong)
+                                        {
+                                            <div class="room-row">
+                                                <div class="room-label">
+                                                    <span>@phongGroup.Key.TenPhong</span>
+                                                </div>
+                                                <div class="time-slots">
+                                                    @foreach (var suat in phongGroup.OrderBy(s => s.GioBatDau))
+                                                    {
+                                                    <button class="btn-time-slot"
+                                                            data-date="@suat.GioBatDau.ToString("yyyy-MM-dd")"
+                                                            onclick="selectShowtime(this, '@phongGroup.Key.TenPhong', '@suat.GioBatDau', @suat.MaSuat)">
+                                                        @suat.GioBatDau.ToString(@"hh\:mm")
+                                                    </button>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                    </div>
+                </div>
+            </div>
+                <div class="seat-selection">
+                    <div class="screen-text">MÀN HÌNH</div>
+                    <div class="screen"></div>
+                    <div id="seat-map-container" class="seat-map mt-4"></div>
+                @{
+                    var danhSachGhe = ViewBag.dlChiTietGhe as List<TTCN.Models.GheNgoi>;
+                }
+
+                <div class="container mt-4">
+                    <h3 class="text-center mb-4">Sơ Đồ Ghế</h3>
+                        <div class="seat-map-container">
+                            @foreach (var groupHang in danhSachGhe.GroupBy(g => g.HangGhe).OrderBy(g => g.Key))
+                            {
+                                <div class="hang-ghe-row">
+                                    <div class="label-hang">@groupHang.Key</div>
+
+                                    @foreach (var ghe in groupHang.OrderBy(g => g.MaPhong))
+                                    {
+                                        string cssClass = (ghe.LoaiGhe == "VIP") ? "ghe-vip" : "ghe-thuong";
+                                        string tenGhe = ghe.TenGhe;
+
+                                        <button type="button"
+                                                class="btn btn-ghe @cssClass"
+                                                onclick="chonGhe(@ghe.MaGhe, '@tenGhe')">
+                                            @ghe.TenGhe
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="d-flex justify-content-center gap-4 mt-4">
+                            <div><span class="btn btn-ghe ghe-thuong" style="width:20px; height:20px; display:inline-block;"></span> Thường</div>
+                            <div><span class="btn btn-ghe ghe-vip" style="width:20px; height:20px; display:inline-block;"></span> VIP</div>
+                        </div>
+                    }
+                </div>
+
+                <script>
+                    function chonGhe(id, ten) {
+                        alert("Chọn ghế: " + ten);
+                    }
+                </script>
+                </div>
+                    <div class="legend">
+                        <div class="legend-item"><div class="seat"></div><span>Trống</span></div>
+                        <div class="legend-item"><div class="seat selected"></div><span>Đang chọn</span></div>
+                        <div class="legend-item"><div class="seat occupied"></div><span>Đã bán</span></div>
+                    </div>
+                </div>
+
+        </div>
+    </div>
+
+            <!-- CỘT BÊN PHẢI: TÓM TẮT GIỎ HÀNG -->
+            <div class="col-lg-4">
+                <div class="booking-summary">
+                    <!-- Thông tin phim -->
+                    <div class="mb-3 clearfix">
+                        <img src="https://placehold.co/100x150/FF5733/FFFFFF?text=L%E1%BA%ADt+M%E1%BA%B7t+7" alt="Poster Phim" class="summary-poster">
+                        <div class="summary-details">
+                            @* <h4 class="mb-1">Lật Mặt 7</h4>
+                            <p><strong>Rạp:</strong> CGV Vincom Plaza</p>
+                            <p><strong>Ngày:</strong> 16/11/2025</p>
+                            <p><strong>Giờ:</strong> 19:30</p> *@
+                            <h4 class="mb-1">@ViewBag.TenPhim</h4> <p><strong>Rạp:</strong> CGV Vincom Đồng Khởi</p>
+                            <p id="sum-room"><strong>Phòng:</strong> Chưa chọn</p> <p><strong>Ngày:</strong> 16/11/2025</p>
+                            <p><strong>Giờ:</strong> --:--</p>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Ghế đã chọn -->
+                    <div class="mb-3">
+                        <h5>Ghế đã chọn (<span id="seat-count">0</span>)</h5>
+                        <ul id="selected-seats-list">
+                            <!-- JS sẽ thêm ghế vào đây -->
+                        </ul>
+                    </div>
+
+                    <hr>
+
+                    <!-- Combo -->
+                    <div class="mb-3">
+                        <h5>Chọn Combo</h5>
+                        <select class="form-select" id="combo-select">
+                            <option value="0">Không chọn combo</option>
+                            <option value="70000">Combo 1 (1 Bắp + 1 Nước) - 70.000đ</option>
+                            <option value="120000">Combo 2 (2 Bắp + 2 Nước) - 120.000đ</option>
+                        </select>
+                    </div>
+
+                    <hr>
+
+                    <!-- Tổng tiền -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">TỔNG CỘNG</h5>
+                        <span class="total-price" id="total-price">0đ</span>
+                    </div>
+
+                    <!-- Nút Thanh toán -->
+                    <button class="btn btn-checkout w-100" data-bs-toggle="modal" data-bs-target="#paymentModal">
+                        Thanh Toán
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Thông báo (Thay thế cho alert()) -->
+    <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-3 bg-dark text-white">
+                <div class="modal-header border-bottom-0">
+                    <h5 class="modal-title" id="paymentModalLabel" style="color: var(--brand-red);">Xác nhận Thanh toán</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body fs-5 py-4 text-center">
+                    Đây là giao diện mô phỏng.<br>
+                    Tổng số tiền của bạn là: <strong id="modal-total-price" class="text-warning">0đ</strong>.<br>
+                    Chức năng thanh toán thực tế cần kết nối với backend.
+                </div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" class="btn btn-checkout" data-bs-dismiss="modal">Xác nhận</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- JavaScript Tùy chỉnh cho đặt vé -->
+    <script>
+                // const seatContainer = document.getElementById('seat-map-container');
+                // const selectedSeatsList = document.getElementById('selected-seats-list');
+                // const totalPriceEl = document.getElementById('total-price');
+                // const modalTotalPriceEl = document.getElementById('modal-total-price');
+                // const seatCountEl = document.getElementById('seat-count');
+                // const comboSelect = document.getElementById('combo-select');
+
+                // --- CẤU HÌNH ---
+                // const TICKET_PRICE = 95000; Giá vé cơ bản
+                // const ROWS = 8;
+                // const SEATS_PER_ROW = 12;
+
+                // let selectedSeats = [];
+
+                // Hàm vẽ sơ đồ ghế
+                // function renderSeatMap() {
+                //     seatContainer.innerHTML = ''; Xóa ghế cũ
+                //     selectedSeats = []; Reset ghế đã chọn
+
+                //     let seatIndex = 0;
+                //     for (let i = 0; i < ROWS; i++) {
+                //         Thêm nhãn hàng (A, B, C...)
+                //         const rowLabel = document.createElement('div');
+                //         rowLabel.classList.add('row-label');
+                //         rowLabel.innerText = String.fromCharCode(65 + i); A, B, C...
+                //         seatContainer.appendChild(rowLabel); Tùy chọn: Bỏ nếu không muốn nhãn hàng
+
+                //         Tạo ghế
+                //         for (let j = 0; j < SEATS_PER_ROW; j++) {
+                //             const seat = document.createElement('div');
+                //             seat.classList.add('seat');
+                //             seat.dataset.index = seatIndex; Lưu vị trí ghế
+                //             seat.innerText = (j + 1); Số ghế 1-12
+
+                //             Giả lập một số ghế đã bán
+                //             if (Math.random() < 0.2) {
+                //                 seat.classList.add('occupied');
+                //             }
+
+                //             seatContainer.appendChild(seat);
+                //             seatIndex++;
+                //         }
+                //     }
+                //     updateSummary();
+                // }
+
+                // Hàm cập nhật giỏ hàng
+                // function updateSummary() {
+                //     Cập nhật danh sách ghế đã chọn
+                //     selectedSeatsList.innerHTML = '';
+                //     let seatPrice = 0;
+
+                //     selectedSeats.forEach(seatIndex => {
+                //         const seatName = getSeatName(seatIndex);
+                //         const li = document.createElement('li');
+                //         li.innerHTML = `Ghế <strong>${seatName}</strong> <span>${TICKET_PRICE.toLocaleString('vi-VN')}đ</span>`;
+                //         selectedSeatsList.appendChild(li);
+                //         seatPrice += TICKET_PRICE;
+                //     });
+
+                //     Cập nhật giá combo
+                //     const comboPrice = parseInt(comboSelect.value, 10);
+
+                //     Cập nhật tổng tiền
+                //     const total = seatPrice + comboPrice;
+                //     totalPriceEl.innerText = total.toLocaleString('vi-VN') + 'đ';
+                // }
+            // --- LOGIC MỚI BỔ SUNG ---
+                    // Biến toàn cục
+        let selectedSeats = [];
+        let currentMaSuat = 0; // Lưu mã suất đang chọn
+
+        // HÀM CHÍNH: VẼ SƠ ĐỒ GHẾ TỪ API
+        function renderSeatMap(maSuat) {
+            currentMaSuat = maSuat;
+            selectedSeats = []; // Reset ghế đã chọn
+            updateCartUI();     // Reset giỏ hàng
+
+            const container = document.getElementById('seat-map-container');
+
+            // Hiệu ứng Loading
+            container.innerHTML = '<div class="text-center text-light"><div class="spinner-border text-danger" role="status"></div><br>Đang tải sơ đồ ghế...</div>';
+
+            // Gọi API lấy ghế
+            $.ajax({
+                url: '/DatVe/GetGheBySuatChieu', // Đổi thành tên Controller của bạn
+                type: 'GET',
+                data: { maSuat: maSuat },
+                success: function (data) {
+                    container.innerHTML = ''; // Xóa loading
+
+                    if (data.length === 0) {
+                        container.innerHTML = '<p class="text-white text-center">Phòng này chưa có sơ đồ ghế.</p>';
+                        return;
+                    }
+
+                    // Nhóm ghế theo Hàng (A, B, C...)
+                    // data trả về: [{MaGhe: 1, HangGhe: 'A', ...}, ...]
+                    // group thành: { 'A': [ghe1, ghe2], 'B': [ghe3] }
+                    const rows = {};
+                    data.forEach(ghe => {
+                        if (!rows[ghe.HangGhe]) rows[ghe.HangGhe] = [];
+                        rows[ghe.HangGhe].push(ghe);
+                    });
+
+                    // Vẽ từng hàng ghế
+                    for (const [hang, danhSachGhe] of Object.entries(rows)) {
+                        // Tạo dòng bao quanh
+                        const rowDiv = document.createElement('div');
+                        rowDiv.className = 'seat-row mb-2';
+
+                        // Nhãn hàng (A, B, C)
+                        const labelDiv = document.createElement('div');
+                        labelDiv.className = 'row-label';
+                        labelDiv.innerText = hang;
+                        rowDiv.appendChild(labelDiv);
+
+                        // Vẽ từng ghế
+                        danhSachGhe.forEach(ghe => {
+                            const seatBtn = document.createElement('button');
+                            seatBtn.className = 'seat';
+
+                            // Class màu sắc
+                            if (ghe.DaDat) {
+                                seatBtn.classList.add('occupied');
+                                seatBtn.disabled = true;
+                            } else if (ghe.LoaiGhe === 'VIP') {
+                                seatBtn.classList.add('vip');
+                            } else {
+                                seatBtn.classList.add('standard');
+                            }
+
+                            // Số ghế (1, 2, 3)
+                            seatBtn.innerText = ghe.SoGhe;
+
+                            // Sự kiện Click chọn ghế
+                            if (!ghe.DaDat) {
+                                seatBtn.onclick = function() {
+                                    toggleSeat(this, ghe.MaGhe, ghe.TenGhe, ghe.GiaGhe);
+                                };
+                            }
+
+                            rowDiv.appendChild(seatBtn);
+                        });
+
+                        container.appendChild(rowDiv);
+                    }
+                },
+                error: function () {
+                    container.innerHTML = '<p class="text-danger text-center">Lỗi kết nối API.</p>';
+                }
+            });
+        }
+
+        // HÀM CHỌN/BỎ CHỌN GHẾ
+        function toggleSeat(btn, maGhe, tenGhe, giaGhe) {
+            // Kiểm tra xem ghế đã có trong mảng chưa
+            const index = selectedSeats.findIndex(s => s.id === maGhe);
+
+            if (index === -1) {
+                // Chưa chọn -> Thêm vào
+                if (selectedSeats.length >= 8) {
+                    alert("Bạn chỉ được chọn tối đa 8 ghế.");
+                    return;
+                }
+                selectedSeats.push({ id: maGhe, name: tenGhe, price: giaGhe });
+                btn.classList.add('selected');
+            } else {
+                // Đã chọn -> Xóa đi
+                selectedSeats.splice(index, 1);
+                btn.classList.remove('selected');
+            }
+            updateCartUI();
+        }
+
+        // HÀM CẬP NHẬT GIỎ HÀNG BÊN PHẢI
+        function updateCartUI() {
+            const listEl = document.getElementById('selected-seats-list');
+            const countEl = document.getElementById('seat-count');
+            const totalEl = document.getElementById('total-price');
+            const btnCheckout = document.querySelector('.btn-checkout');
+
+            listEl.innerHTML = '';
+            let total = 0;
+
+            // Vẽ lại list ghế đã chọn
+            selectedSeats.sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
+                total += s.price;
+                listEl.innerHTML += `
+                    <li class="d-flex justify-content-between mb-2 text-white">
+                        <span>${s.name}</span>
+                        <strong>${s.price.toLocaleString()}đ</strong>
+                    </li>`;
+            });
+
+            // Cộng tiền combo
+            const comboVal = parseInt(document.getElementById('combo-select').value) || 0;
+            total += comboVal;
+
+            countEl.innerText = selectedSeats.length;
+            totalEl.innerText = total.toLocaleString() + 'đ';
+
+            // Bật/Tắt nút thanh toán
+            btnCheckout.disabled = (selectedSeats.length === 0);
+        }
+
+        // Sửa lại hàm selectShowtime để gọi renderSeatMap
+        function selectShowtime(btnElement, roomName, time, maSuat) {
+            // ... logic đổi màu nút active giữ nguyên ...
+            const isAlreadyActive = btnElement.classList.contains('active');
+
+            // Reset style các nút khác
+            document.querySelectorAll('.btn-time-slot').forEach(b => b.classList.remove('active'));
+
+            if (isAlreadyActive) {
+                // Bỏ chọn -> Xóa sơ đồ ghế
+                document.getElementById('seat-map-container').innerHTML = '';
+                resetSummaryInfo();
+            } else {
+                // Chọn mới -> Active nút -> Gọi API vẽ ghế
+                btnElement.classList.add('active');
+                updateBookingInfo(roomName, time);
+
+                // 👇 GỌI HÀM VẼ GHẾ Ở ĐÂY
+                renderSeatMap(maSuat);
+            }
+        }
+
+        // Sự kiện đổi combo tính lại tiền
+        document.getElementById('combo-select').addEventListener('change', updateCartUI);
+            // Hàm xử lý khi chọn suất chiếu (Giờ)
+            // --- LOGIC CHỌN/BỎ CHỌN SUẤT CHIẾU ---
+        function selectShowtime(btnElement, roomName, time) {
+            const isAlreadyActive = btnElement.classList.contains('active');
+
+            // 1. Reset tất cả về mặc định (CSS .btn-time-slot sẽ lo màu sắc)
+            document.querySelectorAll('.btn-time-slot').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if (isAlreadyActive) {
+                // Bỏ chọn -> Đã reset ở trên rồi -> Xong
+                resetSummaryInfo();
+                clearSeatMap();
+            } else {
+                // Chọn mới -> Thêm class active để CSS tô đỏ
+                btnElement.classList.add('active');
+                updateBookingInfo(roomName, time);
+                renderSeatMap();
+            }
+        }
+
+        // --- CÁC HÀM HỖ TRỢ (Helper Functions) ---
+
+        function updateBookingInfo(roomName, time) {
+            const cinemaName = document.getElementById('cinema-select').value;
+
+            // Cập nhật Rạp & Giờ
+            // Lưu ý: Selector nth-child phải khớp với HTML của bạn
+            document.querySelector('.summary-details p:nth-child(2)').innerHTML = `<strong>Rạp:</strong> ${cinemaName}`;
+            document.querySelector('.summary-details p:nth-child(4)').innerHTML = `<strong>Giờ:</strong> ${time}`;
+
+            // Cập nhật Phòng
+            const roomEl = document.getElementById('sum-room');
+            if (roomEl) roomEl.innerHTML = `<strong>Phòng:</strong> ${roomName}`;
+        }
+
+        function resetSummaryInfo() {
+            // Trả về trạng thái mặc định "Chưa chọn"
+            document.querySelector('.summary-details p:nth-child(4)').innerHTML = `<strong>Giờ:</strong> --:--`;
+
+            const roomEl = document.getElementById('sum-room');
+            if (roomEl) roomEl.innerHTML = `<strong>Phòng:</strong> Chưa chọn`;
+
+            // Reset tiền về 0
+            document.getElementById('total-price').innerText = "0đ";
+            document.getElementById('seat-count').innerText = "0";
+            document.getElementById('selected-seats-list').innerHTML = "";
+        }
+
+        function clearSeatMap() {
+            const container = document.getElementById('seat-map-container');
+            // Hiển thị thông báo yêu cầu chọn giờ
+            container.innerHTML = `
+                <div class="d-flex flex-column align-items-center justify-content-center py-5 text-muted">
+                    <i class="fa-regular fa-clock fa-3x mb-3"></i>
+                    <h5>Vui lòng chọn suất chiếu để hiển thị ghế</h5>
+                </div>
+            `;
+            // Reset mảng ghế đã chọn
+            selectedSeats = [];
+        }
+
+        // Gọi mặc định lần đầu
+            // Gọi mặc định lần đầu
+        document.addEventListener('DOMContentLoaded', () => {
+            // Thay vì vẽ ghế ngay, ta gọi hàm xóa ghế để hiện thông báo "Vui lòng chọn suất chiếu"
+            clearSeatMap();
+        });
+                // --- LOGIC LỌC THEO NGÀY ---
+
+        function filterShowtimeByDate(btnElement, selectedDate) {
+            // 1. Xử lý giao diện nút Ngày (Active màu đỏ)
+            document.querySelectorAll('.date-btn').forEach(btn => btn.classList.remove('active'));
+            btnElement.classList.add('active');
+
+            // 2. Lọc các suất chiếu
+            const allSlots = document.querySelectorAll('.btn-time-slot');
+            let hasShowtime = false;
+
+            allSlots.forEach(slot => {
+                // Lấy ngày của suất chiếu từ attribute data-date
+                const slotDate = slot.getAttribute('data-date');
+
+                // So sánh: Nếu trùng ngày chọn -> Hiện, Không trùng -> Ẩn
+                if (slotDate === selectedDate) {
+                    slot.style.display = 'inline-block'; // Hiện
+                    hasShowtime = true;
+                } else {
+                    slot.style.display = 'none'; // Ẩn
+                }
+            });
+
+            // 3. Ẩn các tiêu đề Phòng/Rạp nếu không có suất chiếu nào
+            hideEmptySections();
+
+            // 4. Reset lại trạng thái chọn ghế (nếu đang chọn giờ của ngày cũ)
+            resetSummaryInfo();
+            const container = document.getElementById('seat-map-container');
+            if(container) container.innerHTML = ''; // Xóa sơ đồ ghế
+        }
+
+        // Hàm phụ trợ: Giúp giao diện gọn gàng hơn
+        function hideEmptySections() {
+            // Duyệt qua từng dòng Phòng
+            document.querySelectorAll('.room-row').forEach(row => {
+                // Đếm xem trong phòng này có nút giờ nào đang hiện không
+                const visibleBtns = Array.from(row.querySelectorAll('.btn-time-slot'))
+                                         .filter(btn => btn.style.display !== 'none');
+
+                // Nếu không có nút nào hiện -> Ẩn cả dòng tên phòng
+                row.style.display = visibleBtns.length > 0 ? 'flex' : 'none';
+            });
+
+            // Duyệt qua từng khối Rạp
+            document.querySelectorAll('.cinema-block').forEach(block => {
+                const visibleRooms = Array.from(block.querySelectorAll('.room-row'))
+                                          .filter(row => row.style.display !== 'none');
+
+                // Nếu rạp không có phòng nào chiếu -> Ẩn cả rạp
+                block.style.display = visibleRooms.length > 0 ? 'block' : 'none';
+            });
+        }
+
+        // Tự động chọn ngày đầu tiên khi mới vào trang
+        document.addEventListener('DOMContentLoaded', () => {
+            const firstDate = document.querySelector('.date-btn');
+            if (firstDate) {
+                firstDate.click(); // Kích hoạt sự kiện click giả lập
+            }
+        });
+    </script>
+</body>
+</html>
