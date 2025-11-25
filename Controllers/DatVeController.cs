@@ -75,7 +75,6 @@ namespace TTCN.Controllers
         [HttpGet]
         public IActionResult GetGheBySuatChieu(int maSuat)
         {
-            // 1. Lấy thông tin Suất chiếu 
             var suat = db.SuatChieus
                 .Include(s => s.MaPhongNavigation)
                 .ThenInclude(p => p.GheNgois)
@@ -83,24 +82,24 @@ namespace TTCN.Controllers
 
             if (suat == null) return NotFound();
 
-            // 2. Lấy danh sách ghế đã bán của suất này (trong bảng Ve)
-            var gheDaBan = db.DonDatVes
-                .Include(ddv => ddv.MaSuatNavigation)
-                .ThenInclude(s => s.ChiTietScGnVes)
-                .Where( s=> s.MaSuat == maSuat)
-                .Select( v=>v.MaSuatNavigation.ChiTietScGnVes.Select(gg=>gg.MaGhe))
-                .ToList();
+            // Các ghế đã được đặt (TrangThai = true)
+            var gheDaDat = db.ChiTietScGnVes
+                .Where(ct => ct.MaSuat == maSuat && ct.TrangThai && ct.MaGhe != null)
+                .Select(ct => ct.MaGhe.Value)
+                .ToHashSet();
 
-            // 3. Map dữ liệu để trả về JSON
-            // Sắp xếp theo Hàng (A, B, C) và Số ghế (1, 2, 3)
+            // Map dữ liệu trả về JSON, sắp theo Hàng + Tên ghế
             var data = suat.MaPhongNavigation.GheNgois
                 .OrderBy(g => g.HangGhe)
+                .ThenBy(g => g.TenGhe)
                 .Select(g => new
                 {
-                    MaGhe = g.MaGhe,
-                    TenGhe = g.TenGhe, // Ví dụ: A1
-                    HangGhe = g.HangGhe,          // Để chia dòng
-                    LoaiGhe = g.LoaiGhe,          // VIP/Thường // Tạm thời fix cứng hoặc lấy từ bảng GiaVe// True = Đã bán
+                    g.MaGhe,
+                    g.TenGhe,
+                    g.HangGhe,
+                    g.LoaiGhe,
+                    GiaGhe = string.Equals(g.LoaiGhe, "VIP", StringComparison.OrdinalIgnoreCase) ? 120000 : 90000,
+                    DaDat = gheDaDat.Contains(g.MaGhe)
                 })
                 .ToList();
 
